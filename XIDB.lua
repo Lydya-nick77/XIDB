@@ -1,6 +1,6 @@
 addon.name      = 'XIDB';
 addon.author    = 'Lydya';
-addon.version   = '0.2.0';
+addon.version   = '0.3.0';
 addon.desc      = 'Browsable item database backed by Ashita v4 item resources.';
 addon.link      = 'https://github.com/Lydya-Nick77/XIDB';
 
@@ -9,18 +9,21 @@ local chat = require('chat');
 local settings = require('settings');
 imgui = require('imgui');
 local ffi = require('ffi')
+local json = require('json')
 local itemicon = require('itemicon')
 local encoding = require('encoding')
+local ui = require('ui')
+local ui_config = require('ui.config')
 
 local default_settings = T{
     auto_scan = T{ true, },
     max_results = 250,
     max_scan_id = 65535,
     window = T{
-        x = 100,
-        y = 100,
-        width = 980,
-        height = 620,
+        x = ui_config.WINDOW_DEFAULT.x,
+        y = ui_config.WINDOW_DEFAULT.y,
+        width = ui_config.WINDOW_DEFAULT.width,
+        height = ui_config.WINDOW_DEFAULT.height,
     },
     show_icons = T{ false, },
 };
@@ -46,6 +49,8 @@ local xidb = T{
         cache_limit = nil,
     },
 };
+
+local save_cache;
 
 local function print_message(message)
     print(chat.header(addon.name):append(chat.message(message)));
@@ -96,6 +101,16 @@ local function format_hex(value)
     return ('0x%08X'):fmt(to_number(value, 0));
 end
 
+local function has_bit(m, b)
+    if bit and bit.band then
+        return bit.band(m, b) ~= 0
+    else
+        return (m % (b * 2)) >= b
+    end
+end
+
+local ORDERED_EQUIP_BITS = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000}
+
 local EQUIP_SLOT_MASKS = {
     [0x0001] = 'Main',
     [0x0002] = 'Sub',
@@ -121,17 +136,8 @@ local function format_slots_mask(mask)
         return 'None'
     end
 
-    local function has_bit(m, b)
-        if bit and bit.band then
-            return bit.band(m, b) ~= 0
-        else
-            return (m % (b * 2)) >= b
-        end
-    end
-
-    local ordered_bits = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000}
     local parts = { }
-    for _, b in ipairs(ordered_bits) do
+    for _, b in ipairs(ORDERED_EQUIP_BITS) do
         local n = EQUIP_SLOT_MASKS[b]
         if n and has_bit(mask, b) then
             parts[#parts + 1] = n
@@ -155,14 +161,6 @@ local function format_jobs_mask(mask)
     mask = to_number(mask, 0)
     if mask == 0 then
         return 'None'
-    end
-
-    local function has_bit(m, b)
-        if bit and bit.band then
-            return bit.band(m, b) ~= 0
-        else
-            return (m % (b * 2)) >= b
-        end
     end
 
     local parts = { }
@@ -220,14 +218,6 @@ local function format_flags_mask(mask)
     mask = to_number(mask, 0)
     if mask == 0 then
         return 'None'
-    end
-
-    local function has_bit(m, b)
-        if bit and bit.band then
-            return bit.band(m, b) ~= 0
-        else
-            return (m % (b * 2)) >= b
-        end
     end
 
     local parts = { }
@@ -612,20 +602,21 @@ local function refresh_results(force)
         end
     end
 
-    local selected_visible = false;
-    if (xidb.db.selected_id ~= nil) then
+    if (#xidb.db.results == 0) then
+        xidb.db.selected_id = nil;
+    elseif (xidb.db.selected_id == nil or xidb.db.items_by_id[xidb.db.selected_id] == nil) then
+        xidb.db.selected_id = xidb.db.results[1].id;
+    else
+        local selected_visible = false;
         for _, entry in ipairs(xidb.db.results) do
             if (entry.id == xidb.db.selected_id) then
                 selected_visible = true;
                 break;
             end
         end
-    end
-
-    if (#xidb.db.results == 0) then
-        xidb.db.selected_id = nil;
-    elseif (xidb.db.selected_id == nil or not selected_visible) then
-        xidb.db.selected_id = xidb.db.results[1].id;
+        if not selected_visible then
+            xidb.db.selected_id = xidb.db.results[1].id;
+        end
     end
 end
 
@@ -694,6 +685,8 @@ local function rebuild_index(silent)
     xidb.db.cache_query = nil;
     xidb.db.cache_limit = nil;
 
+    save_cache();
+
     refresh_results(true);
 
     if (#xidb.db.results > 0) then
@@ -705,9 +698,122 @@ local function rebuild_index(silent)
     end
 end
 
+local function get_cache_dir()
+    return addon.path .. 'items';
+end
+
+local function get_cache_path()
+    return get_cache_dir() .. '\\item_cache.json';
+end
+
+save_cache = function()
+    local to_save = {};
+    for _, entry in ipairs(xidb.db.items) do
+        to_save[#to_save + 1] = {
+            id          = entry.id,
+            name        = entry.name,
+            log_singular = entry.log_singular,
+            log_plural  = entry.log_plural,
+            description = entry.description,
+            type        = entry.type,
+            flags       = entry.flags,
+            stack_size  = entry.stack_size,
+            level       = entry.level,
+            jobs        = entry.jobs,
+            slots       = entry.slots,
+        };
+    end
+
+    os.execute(('mkdir "%s" >nul 2>nul'):fmt(get_cache_dir()));
+
+    local path = get_cache_path();
+    local f, err = io.open(path, 'w+');
+    if not f then
+        print_error(('Failed to write item cache: %s'):fmt(tostring(err)));
+        return;
+    end
+    local ok, enc = pcall(json.encode, to_save);
+    if not ok or not enc then
+        print_error('Failed to encode item cache.');
+        f:close();
+        return;
+    end
+    f:write(enc);
+    f:close();
+end
+
+local function load_from_cache()
+    local path = get_cache_path();
+    local f = io.open(path, 'r');
+    if not f then
+        return false;
+    end
+    local content = f:read('*a');
+    f:close();
+
+    if not content or content == '' then
+        return false;
+    end
+
+    local ok, loaded = pcall(json.decode, content);
+    if not ok or type(loaded) ~= 'table' then
+        return false;
+    end
+
+    xidb.db.items = {};
+    xidb.db.items_by_id = {};
+
+    for _, raw in ipairs(loaded) do
+        local id = to_number(raw.id, 0);
+        if id > 0 then
+            local entry = {
+                id            = id,
+                name          = raw.name or '',
+                name_lc       = string.lower(raw.name or ''),
+                log_singular  = raw.log_singular or '',
+                log_singular_lc = string.lower(raw.log_singular or ''),
+                log_plural    = raw.log_plural or '',
+                log_plural_lc = string.lower(raw.log_plural or ''),
+                description   = raw.description or '',
+                description_lc = string.lower(raw.description or ''),
+                resource      = nil,
+                type          = to_number(raw.type, 0),
+                flags         = to_number(raw.flags, 0),
+                stack_size    = to_number(raw.stack_size, 0),
+                level         = to_number(raw.level, 0),
+                jobs          = to_number(raw.jobs, 0),
+                slots         = to_number(raw.slots, 0),
+            };
+            xidb.db.items[#xidb.db.items + 1] = entry;
+            xidb.db.items_by_id[id] = entry;
+        end
+    end
+
+    return #xidb.db.items > 0;
+end
+
+local function apply_cache_load(started_at)
+    xidb.db.indexed = true;
+    xidb.db.scanned_count = #xidb.db.items;
+    xidb.db.last_scan_seconds = os.clock() - started_at;
+    xidb.db.status = ('Loaded %d items from cache in %.2f seconds.'):fmt(
+        xidb.db.scanned_count, xidb.db.last_scan_seconds);
+    xidb.db.cache_query = nil;
+    xidb.db.cache_limit = nil;
+    refresh_results(true);
+    if (#xidb.db.results > 0) then
+        select_item(xidb.db.results[1].id);
+    end
+end
+
 local function ensure_index()
     if (not xidb.db.indexed and not xidb.db.indexing) then
-        rebuild_index(false);
+        local started_at = os.clock();
+        if load_from_cache() then
+            apply_cache_load(started_at);
+        else
+            rebuild_index(false);
+        end
     end
 end
 
@@ -742,12 +848,23 @@ ashita.events.register('load', 'xidb_load_cb', function ()
     xidb.settings = settings.load(default_settings);
 
     if (xidb.settings.auto_scan[1]) then
-        rebuild_index(true);
+        local started_at = os.clock();
+        if load_from_cache() then
+            apply_cache_load(started_at);
+        else
+            rebuild_index(true);
+        end
     end
 end);
 
 ashita.events.register('unload', 'xidb_unload_cb', function ()
-    settings.save();
+    -- Cleanup DAT reader resources
+    local ok, dat_reader = pcall(require, 'dat_reader')
+    if ok and dat_reader and dat_reader.cleanup then
+        dat_reader.cleanup()
+    end
+
+    settings.save()
 end);
 
 ashita.events.register('command', 'xidb_command_cb', function (e)
@@ -771,238 +888,24 @@ ashita.events.register('command', 'xidb_command_cb', function (e)
         return;
     end
 
-    if (args[2]:any('scan')) then
-        rebuild_index(false);
-        xidb.ui.is_open[1] = true;
-        return;
-    end
-
-    -- debug command removed
-
-    if (args[2]:any('clear')) then
-        set_filter('');
-        xidb.ui.is_open[1] = true;
-        return;
-    end
-
-    if (args[2]:any('find')) then
-        ensure_index();
-        set_filter(join_args(args, 3));
-        xidb.ui.is_open[1] = true;
-        if (#xidb.db.results > 0) then
-            select_item(xidb.db.results[1].id);
-        end
-        return;
-    end
-
-    if (args[2]:any('id')) then
-        ensure_index();
-
-        local item_id = to_number(args[3], 0);
-        if (item_id <= 0) then
-            print_help(true);
-            return;
-        end
-
-        local entry = xidb.db.items_by_id[item_id];
-        if (entry == nil) then
-            print_error(('No item found for id %d.'):fmt(item_id));
-            return;
-        end
-
-        xidb.ui.is_open[1] = true;
-        set_filter(tostring(item_id));
-        select_item(item_id);
-        return;
-    end
-
     print_help(true);
 end);
 
-
--- Caching for details pane: only update when selection changes or index is rebuilt
-local details_cache = {
-    selected_id = nil,
-    entry = nil,
-    item_name = '',
-    tex_id = nil,
-}
-
-local function update_details_cache()
-    local sel_id = xidb.db.selected_id or -1
-    local entry = xidb.db.items_by_id[sel_id]
-    if entry == nil then
-        details_cache.selected_id = sel_id
-        details_cache.entry = nil
-        details_cache.item_name = ''
-        details_cache.tex_id = nil
-        return
-    end
-    details_cache.selected_id = sel_id
-    details_cache.entry = entry
-    local item_name = entry.name or ''
-    local name_lookup = get_item_name_by_id(entry.id)
-    if name_lookup and name_lookup ~= '' then
-        item_name = name_lookup
-    end
-    details_cache.item_name = item_name
-    -- Only reload texture if id or resource changed
-    -- xidb_load_item_texture now returns a numeric texture id (or nil)
-    local tex_id = nil
-    if xidb.settings.show_icons[1] then
-        local ok, tid = pcall(function() return itemicon.load(entry.id) end)
-        if ok and tid and type(tid) == 'number' then
-            tex_id = tid
-        else
-            if not ok then
-                print_error(('Failed to load texture for item %d'):fmt(entry.id))
-            end
-        end
-    end
-    details_cache.tex_id = tex_id
-end
-
 ashita.events.register('d3d_present', 'xidb_present_cb', function ()
-    if (not xidb.ui.is_open[1]) then
-        return;
-    end
-
-    ensure_index();
-
-    -- Update details cache if selection changed or index rebuilt
-    if details_cache.selected_id ~= xidb.db.selected_id or (details_cache.entry == nil and xidb.db.selected_id ~= nil) then
-        update_details_cache()
-    end
-
-    imgui.SetNextWindowPos({ xidb.settings.window.x, xidb.settings.window.y }, ImGuiCond_FirstUseEver);
-    imgui.SetNextWindowSize({ xidb.settings.window.width, xidb.settings.window.height }, ImGuiCond_FirstUseEver);
-    imgui.SetNextWindowSizeConstraints({ 820, 500, }, { FLT_MAX, FLT_MAX, });
-
-    if (imgui.Begin('XIDB', xidb.ui.is_open)) then
-        local pos_x, pos_y = imgui.GetWindowPos();
-        local size_x, size_y = imgui.GetWindowSize();
-        xidb.settings.window.x = math.floor(pos_x);
-        xidb.settings.window.y = math.floor(pos_y);
-        xidb.settings.window.width = math.floor(size_x);
-        xidb.settings.window.height = math.floor(size_y);
-
-        imgui.TextColored({ 1.0, 0.82, 0.32, 1.0 }, 'Ashita v4 Item Database');
-        imgui.SameLine();
-        imgui.Text(('Indexed: %d'):fmt(xidb.db.scanned_count));
-        imgui.SameLine();
-        imgui.Text(('Matches: %d'):fmt(xidb.db.total_matches));
-
-        if (imgui.Button('Rescan')) then
-            rebuild_index(false);
-            settings.save();
-            update_details_cache()
-        end
-        imgui.SameLine();
-        if (imgui.Button('Clear Filter')) then
-            set_filter('');
-        end
-        imgui.SameLine();
-        local auto_scan = { xidb.settings.auto_scan[1], };
-        if (imgui.Checkbox('Auto Scan On Load', auto_scan)) then
-            xidb.settings.auto_scan[1] = auto_scan[1];
-            settings.save();
-        end
-
-        imgui.SameLine();
-        local show_icons = { xidb.settings.show_icons[1], };
-        if (imgui.Checkbox('Show Item Icons', show_icons)) then
-            xidb.settings.show_icons[1] = show_icons[1];
-            settings.save();
-            if not xidb.settings.show_icons[1] then
-                -- clearing cache when user disables icons
-                pcall(function() itemicon.clear() end)
-            end
-        end
-
-        local max_results = { to_number(xidb.settings.max_results, 250), };
-        imgui.SameLine();
-        imgui.SetNextItemWidth(110);
-        if (imgui.InputInt('Max Results', max_results)) then
-            xidb.settings.max_results = math.max(25, math.min(max_results[1], 1000));
-            refresh_results(true);
-            settings.save();
-        end
-
-        imgui.SetNextItemWidth(-1);
-        if (imgui.InputText('Search', xidb.ui.filter, 256)) then
-            refresh_results(true);
-        end
-
-        imgui.TextWrapped('Search by item name, description text, or a numeric id. It reads directly from Ashita item resources');
-        imgui.TextColored({ 0.75, 0.75, 0.75, 1.0 }, xidb.db.status);
-        imgui.Separator();
-
-        imgui.BeginChild('xidb_results', { 430, -1, }, true);
-            if (xidb.db.indexing) then
-                imgui.Text('Scanning resources..');
-            elseif (#xidb.db.results == 0) then
-                imgui.Text('No matching items.');
-            else
-                for _, entry in ipairs(xidb.db.results) do
-                    local label = ('[%05d] %s'):fmt(entry.id, entry.log_singular);
-                    if (imgui.Selectable(label, xidb.db.selected_id == entry.id)) then
-                        select_item(entry.id);
-                        update_details_cache()
-                    end
-                end
-            end
-        imgui.EndChild();
-
-        imgui.SameLine();
-
-        imgui.BeginChild('xidb_details', { 0, -1, }, true);
-            local entry = details_cache.entry
-            if (entry == nil) then
-                imgui.Text('Select an item to inspect its details.');
-            else
-                local item_name = details_cache.item_name or ''
-                local tex_id = details_cache.tex_id
-                if tex_id then
-                    local ok_img = pcall(function()
-                        imgui.Image(tex_id, {36, 36}, {0, 0}, {1, 1}, {1, 1, 1, 1}, {0, 0, 0, 0})
-                    end)
-                    if ok_img then
-                        imgui.SameLine()
-                    else
-                        -- ignore image failures to avoid crashing the addon
-                    end
-                end
-                imgui.TextColored({ 1.0, 0.85, 0.35, 1.0 }, item_name);
-                imgui.Separator();
-
-                imgui.Text(('ID: %d'):fmt(entry.id));
-                imgui.Text(('Level: %d'):fmt(entry.level));
-                imgui.Text(('Stack Size: %d'):fmt(entry.stack_size));
-                imgui.Text(('Type: %s  *verification needed*'):fmt(format_item_type(entry.type)));
-                imgui.Text(('Flags: %s  *verification needed*'):fmt(format_flags_mask(entry.flags)));
-                imgui.Text(('Jobs: %s'):fmt(format_jobs_mask(entry.jobs)));
-                imgui.Text(('Slots: %s'):fmt(format_slots_mask(entry.slots)));
-
-                if (entry.log_singular ~= '') then
-                    imgui.Separator();
-                    imgui.Text('Short Name');
-                    imgui.TextWrapped(item_name);
-                end
-
-                if (entry.log_plural ~= '') then
-                    imgui.Separator();
-                    imgui.Text('Long Name');
-                    imgui.TextWrapped(entry.log_plural);
-                end
-
-                if (entry.description ~= '') then
-                    imgui.Separator();
-                    imgui.Text('Description');
-                    imgui.TextWrapped(entry.description);
-                end
-            end
-        imgui.EndChild();
-    end
-
-    imgui.End();
+    ui.render(xidb, {
+        ensure_index = ensure_index,
+        rebuild_index = rebuild_index,
+        refresh_results = refresh_results,
+        set_filter = set_filter,
+        select_item = select_item,
+        to_number = to_number,
+        get_item_name_by_id = get_item_name_by_id,
+        format_item_type = format_item_type,
+        format_flags_mask = format_flags_mask,
+        format_jobs_mask = format_jobs_mask,
+        format_slots_mask = format_slots_mask,
+        print_error = print_error,
+        itemicon = itemicon,
+        FLT_MAX = FLT_MAX,
+    })
 end);

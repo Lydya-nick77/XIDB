@@ -1,25 +1,92 @@
-# XIDB
+# FFXI Atlas (XIDB)
 
-XIDB is an Ashita v4 addon that builds a searchable item database from the client item resources already exposed by Ashita.
+XIDB is an Ashita v4 addon that provides a multi-module FFXI atlas UI:
 
-## What it does
+- Crafting recipe browser
+- Item browser (search + details + recipe cross-reference)
+- Zone map browser
+- List of Notorious Monsters, their location and their drop list (TBD)
 
-- Scans Ashita item resources and indexes all discovered items.
-- Opens an ImGui browser with a live search field.
-- Searches item names, descriptions, and item ids.
-- Shows per-item details including level, stack size, flags, job, and slot.
+## Modules
+
+### Crafting
+
+- Browse recipes by craft skill and ranks.
+- Supports skill subcategory selection:
+	- Alchemy
+	- Bonecrafting
+	- Clothcraft
+	- Cooking
+	- Goldsmithing
+	- Leathercraft
+	- Smithing
+	- Woodworking
+- For each recipe, shows:
+	- Recipe name and level
+	- Crystal
+	- Main skill and subcraft handling
+	- Ingredient list
+	- HQ1/HQ2/HQ3 results (when available)
+
+### Items Browser
+
+- Builds/loads an indexed item database for fast local searching.
+- Search supports:
+	- Exact and partial item name
+	- Log names (singular/plural)
+	- Description
+	- Item ID 
+- Left pane: result list with live filter.
+- Middle pane: selected item details:
+	- ID
+	- Level
+	- Stack size
+	- Type
+	- Jobs mask 
+	- Slots mask 
+	- Names and description
+- Right pane: Crafting Recipes split into two columns:
+	- Created By
+	- Used As Ingredient
+- Recipe ingredient/result entries are clickable when a matching indexed item is found.
+
+### Maps
+
+- Area-based zone browser.
+- Zone list on the left, map preview on the right.
+- Supports multiple map variants per zone via a dropdown (`Map 1`, `Map 2`, etc.).
+- Some maps are still missing, so it's a work in progress.
+
+### NM
+
+- (not implemented yet).
+
+## Item Index And Cache
+
+- Item data is scanned from Ashita resource manager when needed.
+- Indexed item cache is saved to:
+	- `XIDB/items/item_cache.json`
+- On load, XIDB attempts to read cache first for faster startup.
+- If cache is unavailable/invalid, XIDB rebuilds index from resources.
 
 ## Commands
 
-- `/xidb` toggles the database window.
-- `/xidb help` shows command help.
-- `/xidb scan` rebuilds the item index.
-- `/xidb clear` clears the current search filter.
-- `/xidb find <text>` searches the index.
-- `/xidb id <itemid>` jumps directly to an item by id.
+Current slash command support:
+
+- `/xidb` toggles the main window.
+
+Note: Scan and filter actions are currently performed in the Item Browser UI (buttons/inputs).
+
+## Data Sources
+
+- Item/resource data: Ashita resource manager
+- Crafting recipes: `recipes/*.lua`
+- Craft rank ranges: `ranks.lua`
+- Zones and areas: `zones.lua`
+- Map images: `assets/maps/*`
+
 
 ## Notes
 
-- The database is currently backed by Ashita resource data, not a bundled external item dump.
-- Because of that, the visible fields depend on what the Ashita resource manager exposes for your client resources.
-- The first scan may take a moment, especially if auto-scan is enabled.
+- First-time indexing can take longer than cache-backed startup.
+- Item fields depend on what the current Ashita resources expose.
