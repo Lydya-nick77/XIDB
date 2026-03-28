@@ -899,7 +899,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Cactuar Suave',
         level = '75',
         orb_required = 'Clotho Orb',
         zone = 'Chamber of Oracles',
@@ -990,7 +990,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Come Into My Parlor',
         level = '75',
         orb_required = 'Clotho Orb',
         zone = 'Qu\'Bia Arena',
@@ -1083,8 +1083,8 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
-        level = 'No restriction',
+        name = 'Contaminated Colosseum',
+        level = '75',
         orb_required = 'Atropos Orb',
         zone = 'Horlais Peak',
         max_members = '6',
@@ -1178,7 +1178,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Copycat',
         level = '75',
         orb_required = 'Clotho Orb',
         zone = 'Waughroon Shrine',
@@ -1291,7 +1291,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Double Dragonian',
         level = '75',
         orb_required = 'Clotho Orb',
         zone = 'Horlais Peak',
@@ -1386,7 +1386,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'E-vase-ive Action',
         level = '75',
         orb_required = 'Lachesis Orb',
         zone = 'Qu\'Bia Arena',
@@ -1505,7 +1505,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Infernal Swarm',
         level = '75',
         orb_required = 'Atropos Orb',
         zone = 'Qu\'Bia Arena',
@@ -1626,7 +1626,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Moa Constrictors',
         level = '75',
         orb_required = 'Atropos Orb',
         zone = 'Balga\'s Dais',
@@ -1714,7 +1714,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Ouryu Cometh',
         level = '75',
         orb_required = 'Cloud Evoker',
         zone = 'Riverne - Site A01',
@@ -1779,7 +1779,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Prehistoric Pigeons',
         level = '75',
         orb_required = 'Atropos Orb',
         zone = 'Waughroon Shrine',
@@ -1872,7 +1872,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Seasons Greetings',
         level = '75',
         orb_required = 'Clotho Orb',
         zone = 'Balga\'s Dais',
@@ -1965,7 +1965,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'The Scarlet King',
         level = '75',
         orb_required = 'Atropos Orb',
         zone = 'Chamber of Oracles',
@@ -2055,7 +2055,7 @@ M.ksnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'The Wyrmking Descends',
         level = '75',
         orb_required = 'Monarch\'s Orb',
         zone = 'Riverne - Site B01',

@@ -3378,7 +3378,7 @@ M.bcnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Charming Trio',
         level = '20',
         orb_required = 'Cloudy Orb',
         zone = 'Balga\'s Dais',
