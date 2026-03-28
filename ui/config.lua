@@ -1,5 +1,6 @@
 local crafting_ranks = require('ranks')
 local zones = require('zones')
+local nm_data = require('nms.nm_data')
 
 local M = {}
 
@@ -77,6 +78,37 @@ local function build_maps_nm_subcategories()
     return subcategories
 end
 
+local function build_nm_zones_subcategories()
+    local zones_by_key = { }
+    for _, nm in ipairs(nm_data.nm_list or { }) do
+        if type(nm) == 'table' then
+            local zone_name = tostring(nm.area or ''):match('^%s*(.-)%s*$') or ''
+            if zone_name ~= '' then
+                local key = zone_name:lower()
+                if zones_by_key[key] == nil then
+                    zones_by_key[key] = zone_name
+                end
+            end
+        end
+    end
+
+    local zone_list = { }
+    for _, zone_name in pairs(zones_by_key) do
+        zone_list[#zone_list + 1] = zone_name
+    end
+
+    table.sort(zone_list, function(a, b)
+        return a:lower() < b:lower()
+    end)
+
+    local subcategories = { 'Select Sub Category' }
+    for _, zone_name in ipairs(zone_list) do
+        subcategories[#subcategories + 1] = zone_name
+    end
+
+    return subcategories
+end
+
 M.SUBCATEGORIES = {
     [M.MODULE_INDEX.HOME] = { 'Select Sub Category' },
     [M.MODULE_INDEX.CRAFTING] = {
@@ -92,7 +124,7 @@ M.SUBCATEGORIES = {
     },
     [M.MODULE_INDEX.ITEMS] = { 'Select Sub Category' },
     [M.MODULE_INDEX.MAPS] = build_maps_nm_subcategories(),
-    [M.MODULE_INDEX.NM] = { 'Select Sub Category' },
+    [M.MODULE_INDEX.NM] = build_nm_zones_subcategories(),
 }
 
 function M.get_current_subcategory_name(state)

@@ -45,6 +45,7 @@ XIDB is an Ashita v4 addon that provides a multi-module FFXI atlas UI:
 	- Jobs mask 
 	- Slots mask 
 	- Names and description
+	- If the item is dropped by a NM, it will show the name.
 - Right pane: Crafting Recipes split into two columns:
 	- Created By
 	- Used As Ingredient
@@ -55,11 +56,11 @@ XIDB is an Ashita v4 addon that provides a multi-module FFXI atlas UI:
 - Area-based zone browser.
 - Zone list on the left, map preview on the right.
 - Supports multiple map variants per zone via a dropdown (`Map 1`, `Map 2`, etc.).
-- Some maps are still missing, so it's a work in progress.
 
 ### NM
 
-- (not implemented yet).
+- Zone search or use the search bar to search the NM by name.
+- Display information on the NM with the drops.
 
 ## Item Index And Cache
 

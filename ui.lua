@@ -4,6 +4,7 @@ local home_category_ui = require('ui.category_home')
 local crafting_category_ui = require('ui.category_crafting')
 local items_category_ui = require('ui.category_items')
 local maps_nm_category_ui = require('ui.category_maps')
+local nm_category_ui = require('ui.category_nm')
 local placeholder_category_ui = require('ui.category_placeholder')
 local ui_config = require('ui.config')
 local ui_chrome = require('ui.chrome')
@@ -19,12 +20,14 @@ local ui_state = {
     selected_map_area_key = nil,
     selected_map_preview_zone = nil,
     selected_map_preview_index = 1,
+    selected_nm_index = 0,
 }
 
 local function build_render_context()
     return {
         state = ui_state,
         modules = ui_config.MODULES,
+        module_index = ui_config.MODULE_INDEX,
         subcategories = ui_config.SUBCATEGORIES,
         craft_subcategory_to_skill = ui_config.CRAFT_SUBCATEGORY_TO_SKILL,
         crafting_ranks = ui_config.crafting_ranks,
@@ -56,6 +59,8 @@ local function render_selected_module(ctx, xidb, deps, current_module)
         items_category_ui.render(ctx, xidb, deps)
     elseif selected_module_index == ui_config.MODULE_INDEX.MAPS then
         maps_nm_category_ui.render(ctx)
+    elseif selected_module_index == ui_config.MODULE_INDEX.NM then
+        nm_category_ui.render(ctx, xidb, deps)
     else
         placeholder_category_ui.render(ctx, current_module)
     end

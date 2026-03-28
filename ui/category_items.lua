@@ -1,9 +1,163 @@
 local settings = require('settings')
 local imgui = require('imgui')
 local fonts = require('fonts')
+local nm_data = require('nms.nm_data')
 
 local M = {}
 local RECIPE_COLUMN_SPACING = 12
+local nm_drop_lookup_cache = nil
+
+local function drop_to_lookup_name(ctx, drop)
+    local text = tostring(drop or '')
+    if text == '' then
+        return nil
+    end
+
+    if text:lower():find('gil', 1, true) then
+        return nil
+    end
+
+    text = text:gsub('%s*%b()%s*$', '')
+    local lookup_name = ctx.ingredient_to_lookup_name(text)
+    if lookup_name == '' then
+        return nil
+    end
+
+    return lookup_name
+end
+
+local function ensure_nm_drop_lookup_cache(ctx)
+    if nm_drop_lookup_cache ~= nil then
+        return
+    end
+
+    nm_drop_lookup_cache = { }
+
+    for _, nm in ipairs(nm_data.nm_list or { }) do
+        if type(nm) == 'table' and type(nm.drops) == 'table' then
+            local nm_name = tostring(nm.name or '')
+            local nm_area = tostring(nm.area or '')
+
+            if nm_name ~= '' then
+                for _, drop in ipairs(nm.drops) do
+                    local lookup_name = drop_to_lookup_name(ctx, drop)
+                    if lookup_name ~= nil then
+                        local bucket = nm_drop_lookup_cache[lookup_name]
+                        if bucket == nil then
+                            bucket = { }
+                            nm_drop_lookup_cache[lookup_name] = bucket
+                        end
+
+                        local duplicate = false
+                        for _, existing in ipairs(bucket) do
+                            if existing.name == nm_name and existing.area == nm_area then
+                                duplicate = true
+                                break
+                            end
+                        end
+
+                        if not duplicate then
+                            bucket[#bucket + 1] = {
+                                name = nm_name,
+                                area = nm_area,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    for _, bucket in pairs(nm_drop_lookup_cache) do
+        table.sort(bucket, function(a, b)
+            local a_name = tostring(a.name or ''):lower()
+            local b_name = tostring(b.name or ''):lower()
+            if a_name == b_name then
+                return tostring(a.area or ''):lower() < tostring(b.area or ''):lower()
+            end
+            return a_name < b_name
+        end)
+    end
+end
+
+local function get_nms_dropping_item(ctx, entry, item_name)
+    ensure_nm_drop_lookup_cache(ctx)
+
+    local merged = { }
+    local seen = { }
+    local candidates = {
+        item_name or '',
+    }
+
+    if type(entry) == 'table' then
+        candidates[#candidates + 1] = entry.name or ''
+        candidates[#candidates + 1] = entry.log_singular or ''
+        candidates[#candidates + 1] = entry.log_plural or ''
+    end
+
+    for _, candidate in ipairs(candidates) do
+        local lookup_name = ctx.ingredient_to_lookup_name(candidate)
+        if lookup_name ~= '' then
+            local bucket = nm_drop_lookup_cache[lookup_name] or { }
+            for _, nm in ipairs(bucket) do
+                local key = tostring(nm.name or '') .. '\31' .. tostring(nm.area or '')
+                if not seen[key] then
+                    seen[key] = true
+                    merged[#merged + 1] = nm
+                end
+            end
+        end
+    end
+
+    table.sort(merged, function(a, b)
+        local a_name = tostring(a.name or ''):lower()
+        local b_name = tostring(b.name or ''):lower()
+        if a_name == b_name then
+            return tostring(a.area or ''):lower() < tostring(b.area or ''):lower()
+        end
+        return a_name < b_name
+    end)
+
+    return merged
+end
+
+local function find_zone_subcategory_index(ctx, zone_name)
+    local module_index = ctx.module_index.NM
+    local subcategories = ctx.subcategories[module_index] or { 'Select Sub Category' }
+
+    for index, value in ipairs(subcategories) do
+        if tostring(value or ''):lower() == tostring(zone_name or ''):lower() then
+            return index
+        end
+    end
+
+    return 1
+end
+
+local function find_nm_index_in_zone(zone_name, nm_name)
+    local zone_nms = { }
+
+    for _, nm in ipairs(nm_data.nm_list or { }) do
+        if type(nm) == 'table'
+            and tostring(nm.name or '') ~= ''
+            and tostring(nm.area or ''):lower() == tostring(zone_name or ''):lower()
+        then
+            zone_nms[#zone_nms + 1] = nm
+        end
+    end
+
+    table.sort(zone_nms, function(a, b)
+        return tostring(a.name or ''):lower() < tostring(b.name or ''):lower()
+    end)
+
+    for index, nm in ipairs(zone_nms) do
+        if tostring(nm.name or ''):lower() == tostring(nm_name or ''):lower() then
+            return index
+        end
+    end
+
+    return 0
+end
 
 local function render_created_by_column(ctx, xidb, deps, entry, recipes, column_width)
     imgui.BeginChild('xidb_recipes_created_by', { column_width, 0, }, true)
@@ -173,6 +327,7 @@ function M.render(ctx, xidb, deps)
             fonts.TextPx('Select an item to inspect its details.', 18, fonts.SCALES.LARGE)
         else
             local item_name = ctx.details_cache.item_name or ''
+            local dropped_by_nms = get_nms_dropping_item(ctx, entry, item_name)
             local tex_id = ctx.details_cache.tex_id
             if tex_id then
                 local ok_img = pcall(function()
@@ -208,6 +363,23 @@ function M.render(ctx, xidb, deps)
                 imgui.Separator()
                 fonts.Header('Description')
                 fonts.TextWrappedPx(entry.description, fonts.COLORS.WHITE, 18, fonts.SCALES.LARGE)
+            end
+
+            if (#dropped_by_nms > 0) then
+                imgui.Separator()
+                fonts.Header(('Dropped by (%d)'):fmt(#dropped_by_nms))
+                fonts.WithFont(18, function()
+                    for i, nm in ipairs(dropped_by_nms) do
+                        local label = ('%d. %s (%s)##xidb_item_drop_nm_%d'):fmt(i, nm.name, nm.area ~= '' and nm.area or 'Unknown Area', i)
+                        if imgui.Selectable(label, false) then
+                            local state = ctx.state
+                            state.selected_module_index = ctx.module_index.NM
+                            state.selected_subcategory_index = find_zone_subcategory_index(ctx, nm.area)
+                            state.selected_nm_index = find_nm_index_in_zone(nm.area, nm.name)
+                            state.nm_search_results = nil
+                        end
+                    end
+                end)
             end
         end
     imgui.EndChild()
