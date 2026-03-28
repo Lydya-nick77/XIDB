@@ -2,10 +2,23 @@ local settings = require('settings')
 local imgui = require('imgui')
 local fonts = require('fonts')
 local nm_data = require('nms.nm_data')
+local bcnm_data = require('bcnm.bcnm_data')
+local ksnm_data = require('ksnm.ksnm_data')
+local henm_data = require('henm.henm_data')
 
 local M = {}
 local RECIPE_COLUMN_SPACING = 12
-local nm_drop_lookup_cache = nil
+local drop_lookup_cache = nil
+
+local function clamp(value, min_value, max_value)
+    if value < min_value then
+        return min_value
+    end
+    if value > max_value then
+        return max_value
+    end
+    return value
+end
 
 local function drop_to_lookup_name(ctx, drop)
     local text = tostring(drop or '')
@@ -27,11 +40,69 @@ local function drop_to_lookup_name(ctx, drop)
 end
 
 local function ensure_nm_drop_lookup_cache(ctx)
-    if nm_drop_lookup_cache ~= nil then
+    if drop_lookup_cache ~= nil then
         return
     end
 
-    nm_drop_lookup_cache = { }
+    drop_lookup_cache = { }
+
+    local function add_drop_source(lookup_name, source)
+        if lookup_name == nil or lookup_name == '' then
+            return
+        end
+
+        local bucket = drop_lookup_cache[lookup_name]
+        if bucket == nil then
+            bucket = { }
+            drop_lookup_cache[lookup_name] = bucket
+        end
+
+        local key = table.concat({
+            tostring(source.module or ''),
+            tostring(source.name or ''),
+            tostring(source.area or ''),
+            tostring(source.level or ''),
+            tostring(source.tier or ''),
+        }, '\31')
+
+        for _, existing in ipairs(bucket) do
+            if existing._key == key then
+                return
+            end
+        end
+
+        source._key = key
+        bucket[#bucket + 1] = source
+    end
+
+    local function reward_item_to_lookup_name(ctx2, item_text)
+        local text = tostring(item_text or '')
+        if text == '' then
+            return nil
+        end
+
+        if text:lower():find('gil', 1, true) then
+            return nil
+        end
+
+        text = text:gsub('%s*%b()%s*', ' ')
+        text = text:gsub('^HorizonXI specific changes%s*', '')
+        text = text:gsub('^adjusted stats%s*', '')
+        text = text:gsub('^Scroll of%s+', '')
+        text = text:gsub('%s*/%s*$', '')
+        text = text:gsub('%s*%-%s*$', '')
+        text = text:match('^%s*(.-)%s*$') or ''
+        if text == '' then
+            return nil
+        end
+
+        local lookup_name = ctx2.ingredient_to_lookup_name(text)
+        if lookup_name == '' then
+            return nil
+        end
+
+        return lookup_name
+    end
 
     for _, nm in ipairs(nm_data.nm_list or { }) do
         if type(nm) == 'table' and type(nm.drops) == 'table' then
@@ -42,40 +113,91 @@ local function ensure_nm_drop_lookup_cache(ctx)
                 for _, drop in ipairs(nm.drops) do
                     local lookup_name = drop_to_lookup_name(ctx, drop)
                     if lookup_name ~= nil then
-                        local bucket = nm_drop_lookup_cache[lookup_name]
-                        if bucket == nil then
-                            bucket = { }
-                            nm_drop_lookup_cache[lookup_name] = bucket
-                        end
-
-                        local duplicate = false
-                        for _, existing in ipairs(bucket) do
-                            if existing.name == nm_name and existing.area == nm_area then
-                                duplicate = true
-                                break
-                            end
-                        end
-
-                        if not duplicate then
-                            bucket[#bucket + 1] = {
-                                name = nm_name,
-                                area = nm_area,
-                            }
-                        end
+                        add_drop_source(lookup_name, {
+                            module = 'NM',
+                            name = nm_name,
+                            area = nm_area,
+                        })
                     end
                 end
             end
         end
     end
 
-    for _, bucket in pairs(nm_drop_lookup_cache) do
+    for _, bcnm in ipairs(bcnm_data.bcnm_list or { }) do
+        if type(bcnm) == 'table' and type(bcnm.rewards) == 'table' and tostring(bcnm.name or '') ~= '' then
+            for _, reward_group in ipairs(bcnm.rewards) do
+                local items = (type(reward_group) == 'table' and type(reward_group.items) == 'table') and reward_group.items or { }
+                for _, reward_item in ipairs(items) do
+                    local lookup_name = reward_item_to_lookup_name(ctx, reward_item)
+                    if lookup_name ~= nil then
+                        add_drop_source(lookup_name, {
+                            module = 'BCNM',
+                            name = tostring(bcnm.name or ''),
+                            level = tostring(bcnm.level or ''),
+                            area = tostring(bcnm.zone or ''),
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    for _, ksnm in ipairs(ksnm_data.ksnm_list or { }) do
+        if type(ksnm) == 'table' and type(ksnm.rewards) == 'table' and tostring(ksnm.name or '') ~= '' then
+            for _, reward_group in ipairs(ksnm.rewards) do
+                local items = (type(reward_group) == 'table' and type(reward_group.items) == 'table') and reward_group.items or { }
+                for _, reward_item in ipairs(items) do
+                    local lookup_name = reward_item_to_lookup_name(ctx, reward_item)
+                    if lookup_name ~= nil then
+                        add_drop_source(lookup_name, {
+                            module = 'KSNM',
+                            name = tostring(ksnm.name or ''),
+                            level = tostring(ksnm.level or ''),
+                            area = tostring(ksnm.zone or ''),
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    for _, henm in ipairs(henm_data.henm_list or { }) do
+        if type(henm) == 'table' and type(henm.drops) == 'table' and tostring(henm.name or '') ~= '' then
+            for _, drop in ipairs(henm.drops) do
+                local lookup_name = drop_to_lookup_name(ctx, drop)
+                if lookup_name ~= nil then
+                    add_drop_source(lookup_name, {
+                        module = 'HENM',
+                        name = tostring(henm.name or ''),
+                        tier = tostring(henm.tier or ''),
+                        area = tostring(henm.area or ''),
+                    })
+                end
+            end
+        end
+    end
+
+    for _, bucket in pairs(drop_lookup_cache) do
         table.sort(bucket, function(a, b)
-            local a_name = tostring(a.name or ''):lower()
-            local b_name = tostring(b.name or ''):lower()
-            if a_name == b_name then
+            local module_order = {
+                NM = 1,
+                BCNM = 2,
+                KSNM = 3,
+                HENM = 4,
+            }
+            local am = module_order[tostring(a.module or '')] or 99
+            local bm = module_order[tostring(b.module or '')] or 99
+            if am ~= bm then
+                return am < bm
+            end
+
+            local an = tostring(a.name or ''):lower()
+            local bn = tostring(b.name or ''):lower()
+            if an == bn then
                 return tostring(a.area or ''):lower() < tostring(b.area or ''):lower()
             end
-            return a_name < b_name
+            return an < bn
         end)
     end
 end
@@ -98,24 +220,36 @@ local function get_nms_dropping_item(ctx, entry, item_name)
     for _, candidate in ipairs(candidates) do
         local lookup_name = ctx.ingredient_to_lookup_name(candidate)
         if lookup_name ~= '' then
-            local bucket = nm_drop_lookup_cache[lookup_name] or { }
-            for _, nm in ipairs(bucket) do
-                local key = tostring(nm.name or '') .. '\31' .. tostring(nm.area or '')
+            local bucket = drop_lookup_cache[lookup_name] or { }
+            for _, source in ipairs(bucket) do
+                local key = tostring(source._key or '')
                 if not seen[key] then
                     seen[key] = true
-                    merged[#merged + 1] = nm
+                    merged[#merged + 1] = source
                 end
             end
         end
     end
 
     table.sort(merged, function(a, b)
-        local a_name = tostring(a.name or ''):lower()
-        local b_name = tostring(b.name or ''):lower()
-        if a_name == b_name then
+        local module_order = {
+            NM = 1,
+            BCNM = 2,
+            KSNM = 3,
+            HENM = 4,
+        }
+        local am = module_order[tostring(a.module or '')] or 99
+        local bm = module_order[tostring(b.module or '')] or 99
+        if am ~= bm then
+            return am < bm
+        end
+
+        local an = tostring(a.name or ''):lower()
+        local bn = tostring(b.name or ''):lower()
+        if an == bn then
             return tostring(a.area or ''):lower() < tostring(b.area or ''):lower()
         end
-        return a_name < b_name
+        return an < bn
     end)
 
     return merged
@@ -131,6 +265,16 @@ local function find_zone_subcategory_index(ctx, zone_name)
         end
     end
 
+    return 1
+end
+
+local function find_subcategory_index(ctx, module_index, subcategory_name)
+    local subcategories = ctx.subcategories[module_index] or { 'Select Sub Category' }
+    for index, value in ipairs(subcategories) do
+        if tostring(value or ''):lower() == tostring(subcategory_name or ''):lower() then
+            return index
+        end
+    end
     return 1
 end
 
@@ -152,6 +296,54 @@ local function find_nm_index_in_zone(zone_name, nm_name)
 
     for index, nm in ipairs(zone_nms) do
         if tostring(nm.name or ''):lower() == tostring(nm_name or ''):lower() then
+            return index
+        end
+    end
+
+    return 0
+end
+
+local function find_battle_index_in_level(list, level_text, battle_name)
+    local filtered = { }
+    for _, entry in ipairs(list or { }) do
+        if type(entry) == 'table'
+            and tostring(entry.name or '') ~= ''
+            and tostring(entry.level or ''):lower() == tostring(level_text or ''):lower()
+        then
+            filtered[#filtered + 1] = entry
+        end
+    end
+
+    table.sort(filtered, function(a, b)
+        return tostring(a.name or ''):lower() < tostring(b.name or ''):lower()
+    end)
+
+    for index, entry in ipairs(filtered) do
+        if tostring(entry.name or ''):lower() == tostring(battle_name or ''):lower() then
+            return index
+        end
+    end
+
+    return 0
+end
+
+local function find_henm_index_in_tier(tier_name, henm_name)
+    local filtered = { }
+    for _, entry in ipairs(henm_data.henm_list or { }) do
+        if type(entry) == 'table'
+            and tostring(entry.name or '') ~= ''
+            and tostring(entry.tier or ''):lower() == tostring(tier_name or ''):lower()
+        then
+            filtered[#filtered + 1] = entry
+        end
+    end
+
+    table.sort(filtered, function(a, b)
+        return tostring(a.name or ''):lower() < tostring(b.name or ''):lower()
+    end)
+
+    for index, entry in ipairs(filtered) do
+        if tostring(entry.name or ''):lower() == tostring(henm_name or ''):lower() then
             return index
         end
     end
@@ -301,7 +493,33 @@ function M.render(ctx, xidb, deps)
 
     imgui.Separator()
 
-    imgui.BeginChild('xidb_results', { ctx.results_pane_width, -1, }, true)
+    local state = ctx.state
+    local splitter_width = 6
+    local min_results_width = 220
+    local min_details_width = 260
+    local min_recipes_width = 280
+    local total_width = imgui.GetContentRegionAvail()
+
+    if state.items_results_pane_width == nil then
+        state.items_results_pane_width = ctx.results_pane_width
+    end
+    if state.items_details_pane_width == nil then
+        state.items_details_pane_width = ctx.details_pane_width
+    end
+
+    local results_width = tonumber(state.items_results_pane_width) or ctx.results_pane_width
+    local details_width = tonumber(state.items_details_pane_width) or ctx.details_pane_width
+
+    local max_results_width = math.max(min_results_width, total_width - details_width - min_recipes_width - (splitter_width * 2))
+    results_width = clamp(results_width, min_results_width, max_results_width)
+
+    local max_details_width = math.max(min_details_width, total_width - results_width - min_recipes_width - (splitter_width * 2))
+    details_width = clamp(details_width, min_details_width, max_details_width)
+
+    state.items_results_pane_width = results_width
+    state.items_details_pane_width = details_width
+
+    imgui.BeginChild('xidb_results', { results_width, -1, }, true)
         if (xidb.db.indexing) then
             fonts.TextPx('Scanning resources..', 18, fonts.SCALES.LARGE)
         elseif (#xidb.db.results == 0) then
@@ -321,7 +539,19 @@ function M.render(ctx, xidb, deps)
 
     imgui.SameLine()
 
-    imgui.BeginChild('xidb_details', { ctx.details_pane_width, -1, }, true)
+    local _, splitter_height_1 = imgui.GetContentRegionAvail()
+    imgui.Button('##xidb_items_splitter_left', { splitter_width, splitter_height_1 })
+    if imgui.IsItemActive() then
+        local io = imgui.GetIO()
+        local dragged_width = results_width + (io.MouseDelta.x or 0)
+        local dragged_max = math.max(min_results_width, total_width - details_width - min_recipes_width - (splitter_width * 2))
+        results_width = clamp(dragged_width, min_results_width, dragged_max)
+        state.items_results_pane_width = results_width
+    end
+
+    imgui.SameLine()
+
+    imgui.BeginChild('xidb_details', { details_width, -1, }, true)
         local entry = ctx.details_cache.entry
         if (entry == nil) then
             fonts.TextPx('Select an item to inspect its details.', 18, fonts.SCALES.LARGE)
@@ -369,20 +599,66 @@ function M.render(ctx, xidb, deps)
                 imgui.Separator()
                 fonts.Header(('Dropped by (%d)'):fmt(#dropped_by_nms))
                 fonts.WithFont(18, function()
-                    for i, nm in ipairs(dropped_by_nms) do
-                        local label = ('%d. %s (%s)##xidb_item_drop_nm_%d'):fmt(i, nm.name, nm.area ~= '' and nm.area or 'Unknown Area', i)
+                    for i, source in ipairs(dropped_by_nms) do
+                        local module_name = tostring(source.module or 'NM')
+                        local location_text = tostring(source.area or '')
+                        if module_name == 'BCNM' or module_name == 'KSNM' then
+                            local lvl = tostring(source.level or '')
+                            if lvl ~= '' then
+                                location_text = ('Level %s%s%s'):fmt(lvl, location_text ~= '' and ' - ' or '', location_text)
+                            end
+                        elseif module_name == 'HENM' then
+                            local tier = tostring(source.tier or '')
+                            if tier ~= '' then
+                                location_text = ('%s%s%s'):fmt(tier, location_text ~= '' and ' - ' or '', location_text)
+                            end
+                        end
+
+                        if location_text == '' then
+                            location_text = 'Unknown Area'
+                        end
+
+                        local label = ('%d. [%s] %s (%s)##xidb_item_drop_%d'):fmt(i, module_name, tostring(source.name or ''), location_text, i)
                         if imgui.Selectable(label, false) then
                             local state = ctx.state
-                            state.selected_module_index = ctx.module_index.NM
-                            state.selected_subcategory_index = find_zone_subcategory_index(ctx, nm.area)
-                            state.selected_nm_index = find_nm_index_in_zone(nm.area, nm.name)
-                            state.nm_search_results = nil
+
+                            if module_name == 'NM' then
+                                state.selected_module_index = ctx.module_index.NM
+                                state.selected_subcategory_index = find_zone_subcategory_index(ctx, source.area)
+                                state.selected_nm_index = find_nm_index_in_zone(source.area, source.name)
+                                state.nm_search_results = nil
+                            elseif module_name == 'BCNM' then
+                                state.selected_module_index = ctx.module_index.BCNM
+                                state.selected_subcategory_index = find_subcategory_index(ctx, ctx.module_index.BCNM, source.level)
+                                state.selected_bcnm_index = find_battle_index_in_level(bcnm_data.bcnm_list, source.level, source.name)
+                            elseif module_name == 'KSNM' then
+                                state.selected_module_index = ctx.module_index.KSNM
+                                state.selected_subcategory_index = find_subcategory_index(ctx, ctx.module_index.KSNM, source.level)
+                                state.selected_ksnm_index = find_battle_index_in_level(ksnm_data.ksnm_list, source.level, source.name)
+                            elseif module_name == 'HENM' then
+                                state.selected_module_index = ctx.module_index.HENM
+                                state.selected_subcategory_index = find_subcategory_index(ctx, ctx.module_index.HENM, source.tier)
+                                state.selected_henm_index = find_henm_index_in_tier(source.tier, source.name)
+                                state.henm_search_results = nil
+                            end
                         end
                     end
                 end)
             end
         end
     imgui.EndChild()
+
+    imgui.SameLine()
+
+    local _, splitter_height_2 = imgui.GetContentRegionAvail()
+    imgui.Button('##xidb_items_splitter_right', { splitter_width, splitter_height_2 })
+    if imgui.IsItemActive() then
+        local io = imgui.GetIO()
+        local dragged_width = details_width + (io.MouseDelta.x or 0)
+        local dragged_max = math.max(min_details_width, total_width - results_width - min_recipes_width - (splitter_width * 2))
+        details_width = clamp(dragged_width, min_details_width, dragged_max)
+        state.items_details_pane_width = details_width
+    end
 
     imgui.SameLine()
 

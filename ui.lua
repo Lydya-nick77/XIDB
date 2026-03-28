@@ -5,6 +5,9 @@ local crafting_category_ui = require('ui.category_crafting')
 local items_category_ui = require('ui.category_items')
 local maps_nm_category_ui = require('ui.category_maps')
 local nm_category_ui = require('ui.category_nm')
+local bcnm_category_ui = require('ui.category_bcnm')
+local ksnm_category_ui = require('ui.category_ksnm')
+local henm_category_ui = require('ui.category_henm')
 local placeholder_category_ui = require('ui.category_placeholder')
 local ui_config = require('ui.config')
 local ui_chrome = require('ui.chrome')
@@ -61,6 +64,12 @@ local function render_selected_module(ctx, xidb, deps, current_module)
         maps_nm_category_ui.render(ctx)
     elseif selected_module_index == ui_config.MODULE_INDEX.NM then
         nm_category_ui.render(ctx, xidb, deps)
+    elseif selected_module_index == ui_config.MODULE_INDEX.BCNM then
+        bcnm_category_ui.render(ctx, xidb, deps)
+    elseif selected_module_index == ui_config.MODULE_INDEX.KSNM then
+        ksnm_category_ui.render(ctx, xidb, deps)
+    elseif selected_module_index == ui_config.MODULE_INDEX.HENM then
+        henm_category_ui.render(ctx, xidb, deps)
     else
         placeholder_category_ui.render(ctx, current_module)
     end

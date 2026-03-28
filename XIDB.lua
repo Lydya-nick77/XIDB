@@ -1,6 +1,6 @@
 addon.name      = 'XIDB';
 addon.author    = 'Lydya';
-addon.version   = '0.4.5';
+addon.version   = '0.5.0';
 addon.desc      = 'Browsable item database backed by Ashita v4 item resources.';
 addon.link      = 'https://github.com/Lydya-Nick77/XIDB';
 

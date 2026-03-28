@@ -9,6 +9,9 @@ local TITLE_BY_MODULE = {
     ['Items Browser'] = 'Item Browser',
     ['Maps'] = 'Maps',
     ['NM'] = 'Notorious Monsters',
+    ['BCNM'] = 'BCNM',
+    ['KSNM'] = 'KSNM',
+    ['HENM'] = 'HENM',
 }
 
 local function get_title_text(current_module)
