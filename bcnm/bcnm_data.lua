@@ -3460,7 +3460,7 @@ M.bcnm_list = {
         },
     },
     {
-        name = 'Unknown',
+        name = 'Grimshell Shocktroopers',
         level = '60',
         orb_required = 'Moon Orb',
         zone = 'Waughroon Shrine',
