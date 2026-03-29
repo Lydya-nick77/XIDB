@@ -289,7 +289,7 @@ M.ksnm_list = {
             {
                 group = 'Unknown Grouping:',
                 items = {
-                    'Speed Belt (5.9%) HorizonXI specific changes',
+                    'Speed Belt (5.9%)',
                 },
             },
             {
@@ -772,7 +772,7 @@ M.ksnm_list = {
             {
                 group = 'One of:',
                 items = {
-                    'Speed Belt (5%) HorizonXI specific changes',
+                    'Speed Belt (5%)',
                     'Adaman Chain (44.6%)',
                     'Adamantoise Shell (42%)',
                     'Angel Skin (7.1%)',
