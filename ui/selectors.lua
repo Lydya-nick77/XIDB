@@ -12,6 +12,7 @@ local TITLE_BY_MODULE = {
     ['BCNM'] = 'BCNM',
     ['KSNM'] = 'KSNM',
     ['HENM'] = 'HENM',
+    ['EXP Camps'] = 'EXP Camps',
 }
 
 local function get_title_text(current_module)
@@ -61,6 +62,10 @@ end
 
 function M.render(ctx)
     local state = ctx.state
+    if type(ctx.ensure_subcategories_for_module) == 'function' then
+        ctx.ensure_subcategories_for_module(state.selected_module_index)
+    end
+
     local current_module = ctx.modules[state.selected_module_index] or ctx.modules[1]
     local subcats = ctx.subcategories[state.selected_module_index] or ctx.subcategories[1]
     local current_subcat = subcats[state.selected_subcategory_index] or subcats[1]
@@ -78,6 +83,9 @@ function M.render(ctx)
                         if state.selected_module_index ~= i then
                             state.selected_module_index = i
                             state.selected_subcategory_index = 1
+                            if type(ctx.ensure_subcategories_for_module) == 'function' then
+                                ctx.ensure_subcategories_for_module(i)
+                            end
                         end
                     end
                     if (is_selected) then
@@ -91,6 +99,12 @@ function M.render(ctx)
     imgui.EndChild()
 
     imgui.SameLine()
+
+    if type(ctx.ensure_subcategories_for_module) == 'function' then
+        ctx.ensure_subcategories_for_module(state.selected_module_index)
+    end
+    subcats = ctx.subcategories[state.selected_module_index] or ctx.subcategories[1]
+    current_subcat = subcats[state.selected_subcategory_index] or subcats[1]
 
     if imgui.BeginChild('##xidb_pane_subcategory', { 248, 70 }, true, selector_pane_flags) then
         fonts.Header('Select Sub Category')

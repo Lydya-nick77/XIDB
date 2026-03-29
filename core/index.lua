@@ -404,6 +404,29 @@ function M.create(xidb, opts)
         index.refresh_results(true)
     end
 
+    function index.release_index_memory()
+        if xidb.db.indexing then
+            return false
+        end
+
+        xidb.db.items = {}
+        xidb.db.items_by_id = {}
+        xidb.db.results = {}
+        xidb.db.indexed = false
+        xidb.db.total_matches = 0
+        xidb.db.scanned_count = 0
+        xidb.db.selected_id = nil
+        xidb.db.cache_query = nil
+        xidb.db.cache_limit = nil
+        xidb.db.status = 'Index memory released.'
+
+        pcall(function()
+            collectgarbage('collect')
+        end)
+
+        return true
+    end
+
     return index
 end
 

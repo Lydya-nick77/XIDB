@@ -1,19 +1,45 @@
 local imgui = require('imgui')
 local selectors_ui = require('ui.selectors')
-local home_category_ui = require('ui.category_home')
-local crafting_category_ui = require('ui.category_crafting')
-local items_category_ui = require('ui.category_items')
-local maps_nm_category_ui = require('ui.category_maps')
-local nm_category_ui = require('ui.category_nm')
-local bcnm_category_ui = require('ui.category_bcnm')
-local ksnm_category_ui = require('ui.category_ksnm')
-local henm_category_ui = require('ui.category_henm')
 local placeholder_category_ui = require('ui.category_placeholder')
 local ui_config = require('ui.config')
 local ui_chrome = require('ui.chrome')
 local ui_data = require('ui.data')
 
 local ui = { }
+local category_modules = { }
+
+local MODULE_TO_CATEGORY_PATH = {
+    [ui_config.MODULE_INDEX.HOME] = 'ui.category_home',
+    [ui_config.MODULE_INDEX.CRAFTING] = 'ui.category_crafting',
+    [ui_config.MODULE_INDEX.ITEMS] = 'ui.category_items',
+    [ui_config.MODULE_INDEX.MAPS] = 'ui.category_maps',
+    [ui_config.MODULE_INDEX.NM] = 'ui.category_nm',
+    [ui_config.MODULE_INDEX.BCNM] = 'ui.category_bcnm',
+    [ui_config.MODULE_INDEX.KSNM] = 'ui.category_ksnm',
+    [ui_config.MODULE_INDEX.HENM] = 'ui.category_henm',
+    [ui_config.MODULE_INDEX.EXP_CAMPS] = 'ui.category_expcamps',
+}
+
+local function get_category_module(module_index)
+    if category_modules[module_index] ~= nil then
+        return category_modules[module_index]
+    end
+
+    local path = MODULE_TO_CATEGORY_PATH[module_index]
+    if path == nil then
+        category_modules[module_index] = false
+        return nil
+    end
+
+    local ok, mod = pcall(require, path)
+    if ok and type(mod) == 'table' then
+        category_modules[module_index] = mod
+        return mod
+    end
+
+    category_modules[module_index] = false
+    return nil
+end
 
 local ui_state = {
     selected_module_index = ui_config.MODULE_INDEX.HOME,
@@ -24,6 +50,7 @@ local ui_state = {
     selected_map_preview_zone = nil,
     selected_map_preview_index = 1,
     selected_nm_index = 0,
+    selected_expcamp_band_index = 1,
 }
 
 local function build_render_context()
@@ -34,6 +61,7 @@ local function build_render_context()
         subcategories = ui_config.SUBCATEGORIES,
         craft_subcategory_to_skill = ui_config.CRAFT_SUBCATEGORY_TO_SKILL,
         crafting_ranks = ui_config.crafting_ranks,
+        ensure_subcategories_for_module = ui_config.ensure_subcategories_for_module,
         details_cache = ui_data.details_cache,
         results_pane_width = ui_config.RESULTS_PANE_WIDTH,
         details_pane_width = ui_config.DETAILS_PANE_WIDTH,
@@ -53,23 +81,34 @@ end
 
 local function render_selected_module(ctx, xidb, deps, current_module)
     local selected_module_index = ui_state.selected_module_index
+    if type(ctx.ensure_subcategories_for_module) == 'function' then
+        ctx.ensure_subcategories_for_module(selected_module_index)
+    end
+
+    local category_module = get_category_module(selected_module_index)
+    if not category_module or type(category_module.render) ~= 'function' then
+        placeholder_category_ui.render(ctx, current_module)
+        return
+    end
 
     if selected_module_index == ui_config.MODULE_INDEX.HOME then
-        home_category_ui.render(ctx)
+        category_module.render(ctx)
     elseif selected_module_index == ui_config.MODULE_INDEX.CRAFTING then
-        crafting_category_ui.render(ctx)
+        category_module.render(ctx, xidb, deps)
     elseif selected_module_index == ui_config.MODULE_INDEX.ITEMS then
-        items_category_ui.render(ctx, xidb, deps)
+        category_module.render(ctx, xidb, deps)
     elseif selected_module_index == ui_config.MODULE_INDEX.MAPS then
-        maps_nm_category_ui.render(ctx)
+        category_module.render(ctx)
     elseif selected_module_index == ui_config.MODULE_INDEX.NM then
-        nm_category_ui.render(ctx, xidb, deps)
+        category_module.render(ctx, xidb, deps)
     elseif selected_module_index == ui_config.MODULE_INDEX.BCNM then
-        bcnm_category_ui.render(ctx, xidb, deps)
+        category_module.render(ctx, xidb, deps)
     elseif selected_module_index == ui_config.MODULE_INDEX.KSNM then
-        ksnm_category_ui.render(ctx, xidb, deps)
+        category_module.render(ctx, xidb, deps)
     elseif selected_module_index == ui_config.MODULE_INDEX.HENM then
-        henm_category_ui.render(ctx, xidb, deps)
+        category_module.render(ctx, xidb, deps)
+    elseif selected_module_index == ui_config.MODULE_INDEX.EXP_CAMPS then
+        category_module.render(ctx)
     else
         placeholder_category_ui.render(ctx, current_module)
     end
@@ -88,7 +127,7 @@ function ui.render(xidb, deps)
     imgui.SetNextWindowSize({ xidb.settings.window.width, xidb.settings.window.height }, ImGuiCond_FirstUseEver)
     imgui.SetNextWindowSizeConstraints({ ui_config.WINDOW_MIN.width, ui_config.WINDOW_MIN.height, }, { deps.FLT_MAX, deps.FLT_MAX, })
 
-    if (imgui.Begin('FFXI Atlas (XIDB)', xidb.ui.is_open, bit.bor(ImGuiWindowFlags_NoCollapse))) then
+    if (imgui.Begin('FFXI Atlas (XIDB)', xidb.ui.is_open, bit.bor(ImGuiWindowFlags_NoCollapse, ImGuiWindowFlags_NoTitleBar))) then
         local pos_x, pos_y = imgui.GetWindowPos()
         local size_x, size_y = imgui.GetWindowSize()
         xidb.settings.window.x = math.floor(pos_x)

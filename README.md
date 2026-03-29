@@ -64,6 +64,10 @@ XIDB is an Ashita v4 addon that provides a multi-module FFXI atlas UI:
 
 - Provide all the informations about each HENM fights
 
+### EXP Camps
+
+- List of Experience, Merit and Mana burn camps per level
+
 ## Commands
 
 Current slash command support:

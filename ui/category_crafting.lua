@@ -3,7 +3,60 @@ local fonts = require('fonts')
 
 local M = {}
 
-function M.render(ctx)
+local function go_to_item_browser(ctx, xidb, deps, item_name)
+    if xidb == nil or deps == nil then
+        return false
+    end
+
+    local lookup_name = ctx.ingredient_to_lookup_name(item_name)
+    if lookup_name == '' then
+        return false
+    end
+
+    local item_id = ctx.find_item_id_by_name(xidb, lookup_name)
+    if item_id == nil then
+        return false
+    end
+
+    ctx.state.selected_module_index = ctx.module_index.ITEMS
+    deps.set_filter(lookup_name)
+    deps.select_item(item_id)
+    ctx.update_details_cache(xidb, deps)
+    return true
+end
+
+local function render_clickable_item_line(ctx, xidb, deps, display_text, item_name, id_suffix)
+    local line_text = tostring(display_text or '')
+    if line_text == '' then
+        return
+    end
+
+    if xidb == nil or deps == nil then
+        fonts.Ingredient(line_text)
+        return
+    end
+
+    local lookup_name = ctx.ingredient_to_lookup_name(item_name)
+    if lookup_name == '' then
+        fonts.Ingredient(line_text)
+        return
+    end
+
+    local item_id = ctx.find_item_id_by_name(xidb, lookup_name)
+    if item_id == nil then
+        fonts.Ingredient(line_text)
+        return
+    end
+
+    fonts.WithFont(18, function()
+        local label = line_text .. '##craft_item_link_' .. tostring(id_suffix or '')
+        if imgui.Selectable(label, false) then
+            go_to_item_browser(ctx, xidb, deps, item_name)
+        end
+    end)
+end
+
+function M.render(ctx, xidb, deps)
     local state = ctx.state
     local rank_list = ctx.crafting_ranks.list or { }
     if state.selected_rank_index < 1 or state.selected_rank_index > #rank_list then
@@ -78,7 +131,23 @@ function M.render(ctx)
                         end
 
                         imgui.BeginGroup()
-                            fonts.RecipeName(('(%d) %s'):fmt(display_level, recipe_name))
+                            local recipe_header = ('(%d) %s'):fmt(display_level, recipe_name)
+                            local recipe_lookup_name = ctx.ingredient_to_lookup_name(recipe_name)
+                            local recipe_item_id = nil
+                            if xidb ~= nil and recipe_lookup_name ~= '' then
+                                recipe_item_id = ctx.find_item_id_by_name(xidb, recipe_lookup_name)
+                            end
+
+                            if xidb ~= nil and deps ~= nil and recipe_item_id ~= nil then
+                                fonts.WithFont(18, function()
+                                    local label = ('%s##craft_recipe_result_%d'):fmt(recipe_header, i)
+                                    if imgui.Selectable(label, false) then
+                                        go_to_item_browser(ctx, xidb, deps, recipe_name)
+                                    end
+                                end)
+                            else
+                                fonts.RecipeName(recipe_header)
+                            end
                             -- Show main skill as subcraft if this is a subcraft match
                             if is_subcraft_match then
                                 fonts.Label('Subcraft: ' .. tostring(display_main_skill) .. ' (' .. tostring(level) .. ')')
@@ -109,17 +178,18 @@ function M.render(ctx)
                             fonts.Label('Ingredients:')
                             fonts.Label(('Crystal: %s'):fmt(crystal))
                             if recipe.ingredients and type(recipe.ingredients) == 'table' then
-                                for _, ingredient in ipairs(recipe.ingredients) do
+                                for ingredient_index, ingredient in ipairs(recipe.ingredients) do
                                     if type(ingredient) == 'table' then
                                         local ingredient_name = tostring(ingredient.name or 'Unknown Ingredient')
                                         local ingredient_qty = tonumber(ingredient.qty)
                                         if ingredient_qty and ingredient_qty > 0 then
-                                            fonts.Ingredient((' - %s x%d'):fmt(ingredient_name, ingredient_qty))
+                                            render_clickable_item_line(ctx, xidb, deps, (' - %s x%d'):fmt(ingredient_name, ingredient_qty), ingredient_name, ('%d_ingredient_%d'):fmt(i, ingredient_index))
                                         else
-                                            fonts.Ingredient((' - %s'):fmt(ingredient_name))
+                                            render_clickable_item_line(ctx, xidb, deps, (' - %s'):fmt(ingredient_name), ingredient_name, ('%d_ingredient_%d'):fmt(i, ingredient_index))
                                         end
                                     else
-                                        fonts.Ingredient((' - %s'):fmt(tostring(ingredient)))
+                                        local ingredient_text = tostring(ingredient)
+                                        render_clickable_item_line(ctx, xidb, deps, (' - %s'):fmt(ingredient_text), ingredient_text, ('%d_ingredient_%d'):fmt(i, ingredient_index))
                                     end
                                 end
                             else
@@ -136,15 +206,15 @@ function M.render(ctx)
                             fonts.Label('HQ Results:')
                             local has_hq = false
                             if type(recipe.hq1) == 'string' and recipe.hq1 ~= '' then
-                                fonts.Ingredient((' - HQ1: %s'):fmt(recipe.hq1))
+                                render_clickable_item_line(ctx, xidb, deps, (' - HQ1: %s'):fmt(recipe.hq1), recipe.hq1, ('%d_hq1'):fmt(i))
                                 has_hq = true
                             end
                             if type(recipe.hq2) == 'string' and recipe.hq2 ~= '' then
-                                fonts.Ingredient((' - HQ2: %s'):fmt(recipe.hq2))
+                                render_clickable_item_line(ctx, xidb, deps, (' - HQ2: %s'):fmt(recipe.hq2), recipe.hq2, ('%d_hq2'):fmt(i))
                                 has_hq = true
                             end
                             if type(recipe.hq3) == 'string' and recipe.hq3 ~= '' then
-                                fonts.Ingredient((' - HQ3: %s'):fmt(recipe.hq3))
+                                render_clickable_item_line(ctx, xidb, deps, (' - HQ3: %s'):fmt(recipe.hq3), recipe.hq3, ('%d_hq3'):fmt(i))
                                 has_hq = true
                             end
                             if not has_hq then

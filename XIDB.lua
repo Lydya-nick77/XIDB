@@ -1,6 +1,6 @@
 addon.name      = 'XIDB';
 addon.author    = 'Lydya';
-addon.version   = '0.5.0';
+addon.version   = '0.6.0 ';
 addon.desc      = 'Browsable item database backed by Ashita v4 item resources.';
 addon.link      = 'https://github.com/Lydya-Nick77/XIDB';
 
@@ -100,6 +100,8 @@ local function set_window_open(is_open)
     xidb.ui.is_open[1] = next_state;
     if (next_state) then
         index.ensure_index();
+    else
+        index.release_index_memory();
     end
 end
 
